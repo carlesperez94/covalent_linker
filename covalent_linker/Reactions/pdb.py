@@ -83,6 +83,3 @@ class PDB:
                 residue.append(line)
         return "\n".join(residue)
 
-
-
-
