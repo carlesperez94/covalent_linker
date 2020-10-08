@@ -83,3 +83,15 @@ class PDB:
                 residue.append(line)
         return "\n".join(residue)
 
+def get_resnum_from_line(line):
+    return line[22:26]
+
+def get_atom_pdb_name_from_line(line):
+    return line[12:16]
+
+def get_specifyc_atom_pdb_name(content, line_idx):
+    lines = content.split("\n") 
+    return get_atom_pdb_name_from_line(lines[line_idx])
+
+
+
