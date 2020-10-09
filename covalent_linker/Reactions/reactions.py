@@ -4,7 +4,7 @@ from lib_prep.FragmentTools import tree_detector
 from frag_pele.Growing import add_fragment_from_pdbs
 
 from fragment_keys import fragments_relations
-from pdb import PDB, get_specifyc_atom_pdb_name, get_resnum_from_line
+from pdb import PDB, get_specifyc_atom_pdb_name, get_resnum_from_line, get_atom_pdb_name_from_line
 
 
 class Reactant:
@@ -18,6 +18,7 @@ class Reactant:
         self.chain = None
         self.resnum = None
         self.content = None
+        self.atoms = {}
         self.rdkit_mol = None
         self.pattern = None
         self.reactant_atoms = []
@@ -29,6 +30,7 @@ class Reactant:
         self.pdb.read_conect() # We need conectivity to get BONDS
         ligand = self.pdb.get_ligand(ligand_chain)
         self.resnum = int(get_resnum_from_line(ligand.split("\n")[0]))
+        self.read_atoms(ligand)
         self.content = ligand + "\n" + "".join(self.pdb.conect_section) # List -> Str
         print("Ligand:")
         print(self.content)
@@ -40,6 +42,7 @@ class Reactant:
         self.pdb_file = pdb_input
         self.chain = residue_chain
         self.resnum = residue_number
+        self.read_atoms(self.pdb.get_residue(residue_number, residue_chain))
         self.content = self.pdb.get_residue(residue_number, residue_chain) + "\n" + "".join(self.pdb.conect_section)
         print("Residue:")
         print(self.content)
@@ -57,6 +60,12 @@ class Reactant:
 
     def delete_temporary(self):
         os.remove("tmp.pdb")
+
+    def read_atoms(self, pdb_object):
+        pdb_lines = pdb_object.split("\n")
+        for n, line in enumerate(pdb_lines):
+            pdb_at_name = get_atom_pdb_name_from_line(line).strip()
+            self.atoms[pdb_at_name] = n
 
     def search_reacting_atoms(self):
         self.transform_to_rdkit()
@@ -88,20 +97,23 @@ class Reaction:
                                                        react.molecule_type, 
                                                        react.reactant_atoms))
 
+    def get_bond_previous_bond_to_reaction(self):
+        mol = self.reactants[0].rdkit_mol
+
     def select_fragment(self):
         return fragments_relations[self.reaction_type]
 
     def apply_reaction(self):
         self.get_atoms_from_reaction()
         fr_pdb, fr_core_name, fr_core_h = self.select_fragment()
-        print(self.reactants[0].pdb_file, fr_pdb, fr_core_name, fr_core_h)
+        #### WE NEED TO FIND A WAY TO GET THE PREVIOS BOND TO THE REACTING ATOMS (TO REPLACE THEM BY ANOTHER FRAGMENT)
         add_fragment_from_pdbs.main(self.reactants[0].pdb_file, fr_pdb, 
-                                    pdb_atom_core_name=self.reactants[0].reactant_atoms[0], 
+                                    pdb_atom_core_name="C1", 
                                     pdb_atom_fragment_name=fr_core_name, steps=0, 
                                     core_chain=self.reactants[0].chain,
                                     fragment_chain="L", output_file_to_tmpl="growing_result.pdb", 
                                     output_file_to_grow="initialization_grow.pdb",
-                                    h_core=self.reactants[0].reactant_atoms[1], 
+                                    h_core="C4", 
                                     h_frag=fr_core_h, rename=False, 
                                     threshold_clash=1.70, output_path=".", only_grow=False)
 
