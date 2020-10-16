@@ -68,12 +68,21 @@ class Reactant:
             self.atoms[pdb_at_name] = n
 
     def search_reacting_atoms(self):
+        if not self.reactant_atoms: # To avoid multiplicity
+            self.transform_to_rdkit()
+            patt = Chem.MolFromSmarts(self.pattern) 
+            atom_indexes = self.rdkit_mol.GetSubstructMatch(patt)
+            for at_id in atom_indexes:
+                self.reactant_atoms.append(get_specifyc_atom_pdb_name(self.content, at_id))
+
+    def get_connection_tree(self):
         self.transform_to_rdkit()
-        patt = Chem.MolFromSmarts(self.pattern) 
-        atom_indexes = self.rdkit_mol.GetSubstructMatch(patt)
-        for at_id in atom_indexes:
-            self.reactant_atoms.append(get_specifyc_atom_pdb_name(self.content, at_id))
-         
+        mol = self.rdkit_mol
+        connections = []
+        for bond in mol.GetBonds():
+            connections.append([get_specifyc_atom_pdb_name(self.content, bond.GetBeginAtomIdx()),
+                                get_specifyc_atom_pdb_name(self.content, bond.GetEndAtomIdx())])
+        return connections     
 
 class Reaction:
     """
@@ -98,24 +107,69 @@ class Reaction:
                                                        react.reactant_atoms))
 
     def get_bond_previous_bond_to_reaction(self):
-        mol = self.reactants[0].rdkit_mol
+        if not self.reaction_type:
+            raise ValueError("Reaction Type: None. Please, select a reaction type!")
+        connections = self.reactants[0].get_connection_tree()
+        self.get_atoms_from_reaction()
+        # Getting atoms from ligand
+        self.reactants[0].search_reacting_atoms()
+        reaction_bond = self.reactants[0].reactant_atoms
+        # We first select the first (the most proximal to the ligand part) atom .
+        first_atom_of_reaction_bond = reaction_bond[0]
+        # Then. we must select which bond is connecting with this atom to get the previous bond to the reacting one.
+        for bond in connections:
+            if bond[1] == first_atom_of_reaction_bond:
+                return bond[0].strip(), bond[1].strip()
 
-    def select_fragment(self):
-        return fragments_relations[self.reaction_type]
+    def prepare_intermediate(self):
+        core_name, terminal_name = self.get_bond_previous_bond_to_reaction()
+        fr_pdb, fr_core_name, fr_core_h = fragments_relations[self.reaction_type]
+        outpath = os.path.join(get_directory_from_filepath(self.reactants[0].pdb_file), "reaction")
+        if not os.path.exists(outpath):
+            os.mkdir(outpath)
+        add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
+                                    fr_pdb,
+                                    pdb_atom_core_name=core_name,
+                                    pdb_atom_fragment_name=fr_core_name, 
+                                    steps=0,
+                                    core_chain=self.reactants[0].chain,
+                                    fragment_chain="L",
+                                    output_file_to_tmpl="intermediate.pdb",
+                                    output_file_to_grow="initial.pdb",
+                                    h_core=terminal_name,
+                                    h_frag=fr_core_h,  
+                                    rename=False,
+                                    threshold_clash=1.70, 
+                                    output_path=outpath, 
+                                    only_grow=False)
+        intermediate_path = os.path.join(outpath, "pregrow", "intermediate.pdb")
+        return intermediate_path
+
+    def add_intermediate(self, intermediate_path):
+        replaced_atom, static_atom = self.get_bond_previous_bond_to_reaction()
+        outpath = os.path.join(get_directory_from_filepath(self.reactants[0].pdb_file), "reaction")
+        # Add the intermediate (fragment) onto the COMPLEX PDB
+        add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
+                                    intermediate_path,
+                                    pdb_atom_core_name=self.reactants[1].reactant_atoms[0].strip(), # Atom of the reactant 2
+                                    pdb_atom_fragment_name=static_atom, 
+                                    steps=0,
+                                    core_chain=self.reactants[1].chain,
+                                    fragment_chain=self.reactants[0].chain,
+                                    output_file_to_tmpl="product.pdb",
+                                    output_file_to_grow="initial.pdb",
+                                    h_core=None,
+                                    h_frag=None, 
+                                    rename=False,
+                                    threshold_clash=1.70, 
+                                    output_path=outpath, 
+                                    only_grow=False,
+                                    cov_res="{}:{}".format(self.reactants[1].chain, self.reactants[1].resnum))
+        print("{} completed successfully.".format(self.reaction_type))
 
     def apply_reaction(self):
-        self.get_atoms_from_reaction()
-        fr_pdb, fr_core_name, fr_core_h = self.select_fragment()
-        #### WE NEED TO FIND A WAY TO GET THE PREVIOS BOND TO THE REACTING ATOMS (TO REPLACE THEM BY ANOTHER FRAGMENT)
-        add_fragment_from_pdbs.main(self.reactants[0].pdb_file, fr_pdb, 
-                                    pdb_atom_core_name="C1", 
-                                    pdb_atom_fragment_name=fr_core_name, steps=0, 
-                                    core_chain=self.reactants[0].chain,
-                                    fragment_chain="L", output_file_to_tmpl="growing_result.pdb", 
-                                    output_file_to_grow="initialization_grow.pdb",
-                                    h_core="C4", 
-                                    h_frag=fr_core_h, rename=False, 
-                                    threshold_clash=1.70, output_path=".", only_grow=False)
+         intermediate = self.prepare_intermediate()
+         self.add_intermediate(intermediate)
 
 
 class LigandResidueReaction(Reaction):
@@ -138,6 +192,5 @@ def create_temporary_file(content, filename):
     with open(filename, "w") as out:
         out.write(content)
 
-
-
-
+def get_directory_from_filepath(path):
+    return os.path.dirname(path)    
