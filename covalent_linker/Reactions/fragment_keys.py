@@ -1,5 +1,5 @@
 fragments_relations = {
-                       "Triple bond addition": ["Fragments_library/triple_bond_addition.pdb", 
-                                                "C1", 
-                                                "H1"]
+                       "Nucleophilic addition to triple bond": ["Fragments_library/nucleophilic_addition_triple_bond.pdb", 
+                                                                "C1", 
+                                                                "H1"]
                        }

@@ -83,6 +83,33 @@ class PDB:
                 residue.append(line)
         return "\n".join(residue)
 
+    def read_all(self):
+        self.read_content()
+        self.read_lines()
+        self.read_atoms_section()
+        self.read_conect()
+        
+
+    def delete_atom(self, chain, resnum, atom_name):
+        for line in self.atom_section:
+            chain_l = get_chain_from_line(line).strip()
+            resnum_l = get_resnum_from_line(line).strip()
+            name_l = get_atom_pdb_name_from_line(line).strip()
+            if str(chain_l) == str(chain) and int(resnum_l) == int(resnum) and str(name_l) == str(atom_name):
+                print(line)
+                self.lines.remove(line)
+    
+    def update_content_from_lines(self):
+        self.content = "".join(self.lines)
+
+    def write_content(self, outfile):
+        with open(outfile, "w") as out:
+            out.write(self.content)
+
+
+def get_chain_from_line(line):
+    return line[21]
+
 def get_resnum_from_line(line):
     return line[22:26]
 
