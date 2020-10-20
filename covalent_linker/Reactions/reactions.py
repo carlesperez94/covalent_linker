@@ -1,89 +1,16 @@
 import os
+
 from rdkit import Chem
 from lib_prep.FragmentTools import tree_detector
 from frag_pele.Growing import add_fragment_from_pdbs
 from frag_pele.Helpers.plop_rot_temp import prepare_pdb
-from fragment_keys import fragments_relations
-from pdb import PDB, get_specifyc_atom_pdb_name, get_resnum_from_line, get_atom_pdb_name_from_line
+
+from covalent_linker.Reactions.fragment_keys import fragments_relations
+from covalent_linker.Reactions.pdb import PDB, get_specifyc_atom_pdb_name, get_resnum_from_line, get_atom_pdb_name_from_line
+from covalent_linker.Reactions.reactants import Reactant
+from covalent_linker.Helpers.filemanager import get_directory_from_filepath 
 
 SCH_PATH = "/gpfs/projects/bsc72/SCHRODINGER_ACADEMIC" 
-
-class Reactant:
-    """
-    It defines reactants extracted from PDB files.
-    """
-    def __init__(self):
-        self.pdb_file = None
-        self.pdb = None
-        self.molecule_type = None
-        self.chain = None
-        self.resnum = None
-        self.content = None
-        self.atoms = {}
-        self.rdkit_mol = None
-        self.pattern = None
-        self.reactant_atoms = []
-    
-    def load_ligand(self, pdb_input, ligand_chain="L"):
-        self.pdb = PDB(pdb_input)
-        self.pdb_file = pdb_input
-        self.chain = ligand_chain
-        self.pdb.read_conect() # We need conectivity to get BONDS
-        ligand = self.pdb.get_ligand(ligand_chain)
-        self.resnum = int(get_resnum_from_line(ligand.split("\n")[0]))
-        self.read_atoms(ligand)
-        self.content = ligand + "\n" + "".join(self.pdb.conect_section) # List -> Str
-        print("Ligand:")
-        print(self.content)
-        self.molecule_type = "ligand"
-
-    def load_residue(self, pdb_input, residue_number, residue_chain):
-        self.pdb = PDB(pdb_input)
-        self.pdb.read_conect()
-        self.pdb_file = pdb_input
-        self.chain = residue_chain
-        self.resnum = residue_number
-        self.read_atoms(self.pdb.get_residue(residue_number, residue_chain))
-        self.content = self.pdb.get_residue(residue_number, residue_chain) + "\n" + "".join(self.pdb.conect_section)
-        print("Residue:")
-        print(self.content)
-        self.molecule_type = "residue"
-
-    def transform_to_rdkit(self):
-        if not self.content:
-            raise AttributeError("The content is empty. Check that you have already load a ligand or a residue before transform it!")
-        self.create_temporary()
-        self.rdkit_mol = Chem.MolFromPDBFile("tmp.pdb", removeHs=False)
-        self.delete_temporary()
-
-    def create_temporary(self):
-        create_file(self.content, "tmp.pdb")
-
-    def delete_temporary(self):
-        os.remove("tmp.pdb")
-
-    def read_atoms(self, pdb_object):
-        pdb_lines = pdb_object.split("\n")
-        for n, line in enumerate(pdb_lines):
-            pdb_at_name = get_atom_pdb_name_from_line(line).strip()
-            self.atoms[pdb_at_name] = n
-
-    def search_reacting_atoms(self):
-        if not self.reactant_atoms: # To avoid multiplicity
-            self.transform_to_rdkit()
-            patt = Chem.MolFromSmarts(self.pattern) 
-            atom_indexes = self.rdkit_mol.GetSubstructMatch(patt)
-            for at_id in atom_indexes:
-                self.reactant_atoms.append(get_specifyc_atom_pdb_name(self.content, at_id))
-
-    def get_connection_tree(self):
-        self.transform_to_rdkit()
-        mol = self.rdkit_mol
-        connections = []
-        for bond in mol.GetBonds():
-            connections.append([get_specifyc_atom_pdb_name(self.content, bond.GetBeginAtomIdx()),
-                                get_specifyc_atom_pdb_name(self.content, bond.GetEndAtomIdx())])
-        return connections     
 
 class Reaction:
     """
@@ -94,13 +21,14 @@ class Reaction:
         self.reaction_type = None
         self.hydrogens_to_rm = None
         self.pdb_to_link = None
+        self.outpath = os.path.join(os.getcwd(), "reaction")
 
     def set_nucleophilic_addition_triple_bond_reaction(self):
         if len(self.reactants) != 2:
             raise ValueError("You need two reactants in this reaction")
         self.reaction_type = "Nucleophilic addition to triple bond"
         self.reactants[0].pattern = "[CX2]#[NX1]"
-        self.reactants[1].pattern = "[#16X2H]"
+        self.reactants[1].pattern = ["[#16X2H]", "[OX2H]"] # Thiol, hydroxil
 
     def get_atoms_from_reaction(self):
         for react in self.reactants:
@@ -109,79 +37,10 @@ class Reaction:
                                                        react.molecule_type, 
                                                        react.reactant_atoms))
 
-    def get_bond_previous_bond_to_reaction(self):
-        if not self.reaction_type:
-            raise ValueError("Reaction Type: None. Please, select a reaction type!")
-        connections = self.reactants[0].get_connection_tree()
-        self.get_atoms_from_reaction()
-        # Getting atoms from ligand
-        self.reactants[0].search_reacting_atoms()
-        reaction_bond = self.reactants[0].reactant_atoms
-        # We first select the first (the most proximal to the ligand part) atom .
-        first_atom_of_reaction_bond = reaction_bond[0]
-        # Then. we must select which bond is connecting with this atom to get the previous bond to the reacting one.
-        for bond in connections:
-            if bond[1] == first_atom_of_reaction_bond:
-                return bond[0].strip(), bond[1].strip()
-
-    def prepare_intermediate(self):
-        core_name, terminal_name = self.get_bond_previous_bond_to_reaction()
-        fr_pdb, fr_core_name, fr_core_h = fragments_relations[self.reaction_type]
-        outpath = os.path.join(get_directory_from_filepath(self.reactants[0].pdb_file), "reaction")
-        if not os.path.exists(outpath):
-            os.mkdir(outpath)
-        add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
-                                    fr_pdb,
-                                    pdb_atom_core_name=core_name,
-                                    pdb_atom_fragment_name=fr_core_name, 
-                                    steps=0,
-                                    core_chain=self.reactants[0].chain,
-                                    fragment_chain="L",
-                                    output_file_to_tmpl="intermediate.pdb",
-                                    output_file_to_grow="product_complex.pdb",
-                                    h_core=terminal_name,
-                                    h_frag=fr_core_h,  
-                                    rename=False,
-                                    threshold_clash=1.70, 
-                                    output_path=outpath, 
-                                    only_grow=False)
-        self.pdb_to_link = PDB(os.path.join(outpath, "pregrow", "product_complex.pdb"))
-        self.pdb_to_link.read_all()
-        intermediate_path = os.path.join(outpath, "pregrow", "intermediate.pdb")
-        return intermediate_path
-
-    def add_intermediate(self, intermediate_path):
-        replaced_atom, static_atom = self.get_bond_previous_bond_to_reaction()
-        outpath = os.path.join(get_directory_from_filepath(self.reactants[0].pdb_file), "reaction")
-        # Add the intermediate (fragment) onto the COMPLEX PDB
-        out_add = add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
-                                              intermediate_path,
-                                              pdb_atom_core_name=self.reactants[1].reactant_atoms[0].strip(), # Atom of the reactant 2
-                                              pdb_atom_fragment_name=static_atom, 
-                                              steps=0,
-                                              core_chain=self.reactants[1].chain,
-                                              fragment_chain=self.reactants[0].chain,
-                                              output_file_to_tmpl="product.pdb",
-                                              output_file_to_grow="initial.pdb",
-                                              h_core=None,
-                                              h_frag=None, 
-                                              rename=False,
-                                              threshold_clash=1.70, 
-                                              output_path=outpath, 
-                                              only_grow=False,
-                                              cov_res="{}:{}".format(self.reactants[1].chain, self.reactants[1].resnum))
-        self.hydrogens_to_rm = out_add[1][::-1] # Reversed to fit with the reactants
-        curr_dir = os.getcwd()
-        os.chdir(os.path.join(outpath, "pregrow"))
-        prepare_pdb(pdb_in=os.path.join(outpath, "pregrow", "product.pdb"), 
-                    pdb_out="product_prep.pdb", 
-                    sch_path=SCH_PATH)
-        os.chdir(curr_dir)
-        print("{} completed successfully.".format(self.reaction_type))
-
-    def apply_reaction(self):
-        intermediate = self.prepare_intermediate()
-        self.add_intermediate(intermediate)
+    def apply_reaction(self, interm_out="intermediate.pdb" , free_out="product_free.pdb",
+                       complex_out="product_complex.pdb"):
+        intermediate = self.__prepare_intermediate(interm_out, complex_out)
+        self.__add_intermediate(intermediate, free_out, "bad.pdb")
 
 
     def prepare_pdb_after_reaction(self):
@@ -200,9 +59,81 @@ class Reaction:
         self.pdb_to_link.update_content_from_lines()
 
     def write_pdb(self, outfile):
-        self.pdb_to_link.write_content(outfile)
+        self.pdb_to_link.write_content(os.path.join(self.outpath, outfile))
 
+    def __get_bond_previous_bond_to_reaction(self):
+        if not self.reaction_type:
+            raise ValueError("Reaction Type: None. Please, select a reaction type!")
+        connections = self.reactants[0].get_connection_tree()
+        self.get_atoms_from_reaction()
+        # Getting atoms from ligand
+        self.reactants[0].search_reacting_atoms()
+        reaction_bond = self.reactants[0].reactant_atoms
+        # We first select the first (the most proximal to the ligand part) atom .
+        first_atom_of_reaction_bond = reaction_bond[0].strip()
+        # Then. we must select which bond is connecting with this atom to get the previous bond to the reacting one.
+        for bond in connections:
+            if reaction_bond[0] in bond and reaction_bond[1] not in bond:
+                prev_bond = [bond[0].strip(), bond[1].strip()]
+                if prev_bond[0] == first_atom_of_reaction_bond: # Check if the first atom of the bond is or not the proximal 
+                    prev_bond = prev_bond[::-1] # If is not, change the order to get the correct core-fragment direction
+                return prev_bond
 
+    def __prepare_intermediate(self, free_file="intermediate.pdb", complex_file="product_complex.pdb"):
+        core_name, terminal_name = self.__get_bond_previous_bond_to_reaction()
+        fr_pdb, fr_core_name, fr_core_h = fragments_relations[self.reaction_type]
+        if not os.path.exists(self.outpath):
+            os.mkdir(self.outpath)
+        add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
+                                    fr_pdb,
+                                    pdb_atom_core_name=core_name,
+                                    pdb_atom_fragment_name=fr_core_name, 
+                                    steps=0,
+                                    core_chain=self.reactants[0].chain,
+                                    fragment_chain="L",
+                                    output_file_to_tmpl=free_file,
+                                    output_file_to_grow=complex_file,
+                                    h_core=terminal_name,
+                                    h_frag=fr_core_h,  
+                                    rename=False,
+                                    threshold_clash=1.70, 
+                                    output_path=self.outpath, 
+                                    only_grow=False)
+        # 'pregrow' folder is created by FragPELE
+        self.pdb_to_link = PDB(os.path.join(self.outpath, "pregrow", complex_file))
+        self.pdb_to_link.read_all()
+        intermediate_path = os.path.join(self.outpath, "pregrow", free_file)
+        return intermediate_path
+
+    def __add_intermediate(self, intermediate_path, free_file="product_free.pdb", 
+                         complex_file="bad.pdb"):
+        replaced_atom, static_atom = self.__get_bond_previous_bond_to_reaction()
+        # Add the intermediate (fragment) onto the COMPLEX PDB
+        out_add = add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
+                                              intermediate_path,
+                                              pdb_atom_core_name=self.reactants[1].reactant_atoms[0].strip(), # Atom of the reactant 2
+                                              pdb_atom_fragment_name=static_atom, 
+                                              steps=0,
+                                              core_chain=self.reactants[1].chain,
+                                              fragment_chain=self.reactants[0].chain,
+                                              output_file_to_tmpl=free_file,
+                                              output_file_to_grow=complex_file,
+                                              h_core=None,
+                                              h_frag=None, 
+                                              rename=False,
+                                              threshold_clash=1.70, 
+                                              output_path=self.outpath, 
+                                              only_grow=False,
+                                              cov_res="{}:{}".format(self.reactants[1].chain, 
+                                                                     self.reactants[1].resnum))
+        self.hydrogens_to_rm = out_add[1][::-1] # Reversed to fit with the reactants
+        curr_dir = os.getcwd()
+        os.chdir(os.path.join(self.outpath, "pregrow"))
+        prepare_pdb(pdb_in=free_file, 
+                    pdb_out=free_file, 
+                    sch_path=SCH_PATH)
+        os.chdir(curr_dir)
+        print("{} completed successfully.".format(self.reaction_type))
 
 class LigandResidueReaction(Reaction):
     """
@@ -220,18 +151,4 @@ class LigandResidueReaction(Reaction):
         self.reactants.append(r2)
         
 
-def create_file(content, filename):
-    with open(filename, "w") as out:
-        out.write(content)
-
-def get_directory_from_filepath(path):
-    return os.path.dirname(path)
-
-
-r = LigandResidueReaction()
-r.load_pdb("/home/bsc72/bsc72292/projects/software/covalent_linker/tests/test.pdb", residue_chain="A", residue_num=145)
-r.set_nucleophilic_addition_triple_bond_reaction()
-r.apply_reaction()
-r.prepare_pdb_after_reaction()
-r.write_pdb("funciona.pdb")
 
