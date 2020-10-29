@@ -11,10 +11,10 @@ class ResidueLigandTemplate:
         self.forcefield = 'OPLS2005'
         self.sch_path = '/gpfs/projects/bsc72/SCHRODINGER_ACADEMIC'
 
-    def set_OPLS2005_forcefield():
+    def set_OPLS2005_forcefield(self):
         self.forcefield = 'OPLS2005'
 
-    def set_OFF_forcefield():
+    def set_OFF_forcefield(self):
         self.forcefield = 'OpenFF'
 
     def get_template(self, outpath='grw'):
