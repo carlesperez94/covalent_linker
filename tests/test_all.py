@@ -22,12 +22,15 @@ def test_nucleophilic_triple_CYS():
     assert filecmp.cmp(out2, exp2)
 
 def test_template_creation():
-    out = "output_files/reaction/pregrow/grw"
-    exp = "expected_files/nucleoph_t_bond/grw"
+    out1 = "output_files/DataLocal/Templates/OPLS2005/Protein/grw"
+    exp1 = "expected_files/nucleoph_t_bond/grw"
+    out2 = "output_files/DataLocal/LigandRotamerLibs/GRW.rot.assign"
+    exp2 = "expected_files/nucleoph_t_bond/GRW.rot.assign"
     pdbfile = "output_files/reaction/pregrow/product_free.pdb"
     templ = ResidueLigandTemplate(pdbfile, "CYS")
-    templ.get_template(outpath=out) 
-    assert filecmp.cmp(out, exp)
+    templ.get_datalocal(outdir="output_files", name="grw") 
+    assert filecmp.cmp(out1, exp1)
+    assert filecmp.cmp(out2, exp2)
     clear()
 
 def test_nucleophilic_triple_SER():

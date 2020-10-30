@@ -3,7 +3,7 @@ import shutil
 import subprocess
 from frag_pele.Helpers import constraints
 import covalent_linker.Helpers.template_builder as tb
-from covalent_linker.constants import LICENSE
+from covalent_linker.constants import LICENSE, PELE_EXEC
 
 
 class PELEControlFile:
@@ -91,4 +91,37 @@ class PELEControlFile:
 
 
 
-        
+class PELESimulation:
+
+    def __init__(self, control_file, pele_exec=PELE_EXEC, processors=4, mode='srun'):
+        self.control_file = control_file
+        self.pele_exec = pele_exec
+        self.__processors = processors
+        self.__mode = mode
+        self.__command = None
+        self.__get_command()
+
+    def set_mpi_mode(self):
+        self.__mode = 'mpirun'
+        self.__get_command() 
+
+    def set_srun_mode(self):
+        self.__mode = 'srun'
+        self.__get_command()
+
+    def set_processors(self, proc):
+        self.__processors = int(proc)
+        self.__get_command()
+
+    def run(self):
+        print(self.__command)
+        subprocess.call(self.__command.split())
+
+    def __get_command(self):
+        cmd = "{} -n {} {} {}"
+        cmd = cmd.format(self.__mode, self.__processors, self.pele_exec, self.control_file)
+        self.__command = cmd
+
+
+
+ 
