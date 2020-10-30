@@ -5,9 +5,10 @@ from frag_pele.Helpers import constraints
 import covalent_linker.Helpers.template_builder as tb
 from covalent_linker.constants import LICENSE
 
+
 class PELEControlFile:
 
-    def __init__(self, template, outpath="pele.conf", license=LICENSE, 
+    def __init__(self, template, license=LICENSE, 
                  results_path="simulation_output", steps=100, overlap=0.7, 
                  chain="L", con_backbone=5, con_ter=5, con_interval=10,
                  center=[0,0,0], temperature=1000, seed=1000, steering=0, 
@@ -83,6 +84,10 @@ class PELEControlFile:
                     }
         template_filled = tb.TemplateBuilder(self.template, keywords)
         self.content = template_filled.conf
+
+    def write_file(self, outpath="pele.conf"):
+        with open(outpath, "w") as out:
+            out.write(self.content)
 
 
 
