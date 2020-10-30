@@ -1,7 +1,8 @@
 import os 
 
 from rdkit import Chem
-from covalent_linker.Reactions.pdb import PDB, get_specifyc_atom_pdb_name, get_resnum_from_line, get_atom_pdb_name_from_line
+from covalent_linker.Reactions.pdb import PDB, get_specifyc_atom_pdb_name, get_resnum_from_line
+from covalent_linker.Reactions.pdb import get_atom_pdb_name_from_line, get_resname_from_line
 from covalent_linker.Helpers.filemanager import create_file 
 
 class Reactant:
@@ -14,6 +15,7 @@ class Reactant:
         self.molecule_type = None
         self.chain = None
         self.resnum = None
+        self.resname = None
         self.content = None
         self.atoms = {}
         self.rdkit_mol = None
@@ -27,6 +29,7 @@ class Reactant:
         self.pdb.read_conect() # We need conectivity to get BONDS
         ligand = self.pdb.get_ligand(ligand_chain)
         self.resnum = int(get_resnum_from_line(ligand.split("\n")[0]))
+        self.resname = get_resname_from_line(ligand.split("\n")[0])
         self.read_atoms(ligand)
         self.content = ligand + "\n" + "".join(self.pdb.conect_section) # List -> Str
         print("Ligand:")
@@ -39,8 +42,10 @@ class Reactant:
         self.pdb_file = pdb_input
         self.chain = residue_chain
         self.resnum = residue_number
-        self.read_atoms(self.pdb.get_residue(residue_number, residue_chain))
-        self.content = self.pdb.get_residue(residue_number, residue_chain) + "\n" + "".join(self.pdb.conect_section)
+        residue_content = self.pdb.get_residue(residue_number, residue_chain)
+        self.read_atoms(residue_content)
+        self.content = residue_content + "\n" + "".join(self.pdb.conect_section)
+        self.resname = get_resname_from_line(residue_content.split("\n")[0])
         print("Residue:")
         print(self.content)
         self.molecule_type = "residue"
@@ -58,14 +63,18 @@ class Reactant:
                 patt = Chem.MolFromSmarts(self.pattern)
                 atom_indexes = self.rdkit_mol.GetSubstructMatch(patt)
                 for at_id in atom_indexes:
-                    self.reactant_atoms.append(get_specifyc_atom_pdb_name(self.content, at_id))
+                    self.reactant_atoms.append(get_specifyc_atom_pdb_name(self.content, 
+                                                                          at_id))
             if type(self.pattern) is list:
                 for pattern in self.pattern:
                     patt = Chem.MolFromSmarts(pattern)
                     atom_indexes = self.rdkit_mol.GetSubstructMatch(patt)
                     if atom_indexes:
                         for at_id in atom_indexes:
-                            self.reactant_atoms.append(get_specifyc_atom_pdb_name(self.content, at_id))
+                            self.reactant_atoms.append(
+                                                get_specifyc_atom_pdb_name(self.content, 
+                                                                           at_id)
+                                                      )
             if not self.reactant_atoms:
                 raise ValueError("Reaction pattern not found in reactant")
 
@@ -74,8 +83,10 @@ class Reactant:
         mol = self.rdkit_mol
         connections = []
         for bond in mol.GetBonds():
-            connections.append([get_specifyc_atom_pdb_name(self.content, bond.GetBeginAtomIdx()),
-                                get_specifyc_atom_pdb_name(self.content, bond.GetEndAtomIdx())])
+            connections.append([get_specifyc_atom_pdb_name(self.content, 
+                                                           bond.GetBeginAtomIdx()),
+                                get_specifyc_atom_pdb_name(self.content, 
+                                                           bond.GetEndAtomIdx())])
         return connections
 
     def __transform_to_rdkit(self):

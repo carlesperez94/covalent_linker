@@ -9,8 +9,7 @@ from covalent_linker.Reactions.fragment_keys import fragments_relations
 from covalent_linker.Reactions.pdb import PDB, get_specifyc_atom_pdb_name, get_resnum_from_line, get_atom_pdb_name_from_line
 from covalent_linker.Reactions.reactants import Reactant
 from covalent_linker.Helpers.filemanager import get_directory_from_filepath 
-
-SCH_PATH = "/gpfs/projects/bsc72/SCHRODINGER_ACADEMIC" 
+from covalent_linker.constants import SCH_PATH 
 
 class Reaction:
     """
@@ -106,7 +105,7 @@ class Reaction:
         return intermediate_path
 
     def __add_intermediate(self, intermediate_path, free_file="product_free.pdb", 
-                         complex_file="bad.pdb"):
+                           complex_file="bad.pdb"):
         replaced_atom, static_atom = self.__get_bond_previous_bond_to_reaction()
         # Add the intermediate (fragment) onto the COMPLEX PDB
         out_add = add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
@@ -126,6 +125,8 @@ class Reaction:
                                               only_grow=False,
                                               cov_res="{}:{}".format(self.reactants[1].chain, 
                                                                      self.reactants[1].resnum))
+        os.remove("bad.pdb") # Clear unnecessary files from add_fragments...
+        os.remove("merged.pdb")
         self.hydrogens_to_rm = out_add[1][::-1] # Reversed to fit with the reactants
         curr_dir = os.getcwd()
         os.chdir(os.path.join(self.outpath, "pregrow"))

@@ -4,6 +4,7 @@ import filecmp
 
 from covalent_linker.Reactions.reactions import LigandResidueReaction
 from covalent_linker.Reactions.pdb import PDB
+from covalent_linker.Simulations.create_templates import ResidueLigandTemplate 
 
 def test_nucleophilic_triple_CYS():
     r = LigandResidueReaction()
@@ -19,6 +20,14 @@ def test_nucleophilic_triple_CYS():
     exp2 = "expected_files/nucleoph_t_bond/product_free_cys.pdb"
     assert filecmp.cmp(out1, exp1)
     assert filecmp.cmp(out2, exp2)
+
+def test_template_creation():
+    out = "output_files/reaction/pregrow/grw"
+    exp = "expected_files/nucleoph_t_bond/grw"
+    pdbfile = "output_files/reaction/pregrow/product_free.pdb"
+    templ = ResidueLigandTemplate(pdbfile, "CYS")
+    templ.get_template(outpath=out) 
+    assert filecmp.cmp(out, exp)
     clear()
 
 def test_nucleophilic_triple_SER():
