@@ -20,7 +20,6 @@ class Reaction:
         self.reaction_type = None
         self.hydrogens_to_rm = None
         self.pdb_to_link = None
-        self.outpath = os.path.join(os.getcwd(), "reaction")
 
     def set_nucleophilic_addition_triple_bond_reaction(self):
         if len(self.reactants) != 2:
@@ -36,13 +35,16 @@ class Reaction:
                                                        react.molecule_type, 
                                                        react.reactant_atoms))
 
-    def apply_reaction(self, interm_out="intermediate.pdb" , free_out="product_free.pdb",
-                       complex_out="product_complex.pdb"):
-        intermediate = self.__prepare_intermediate(interm_out, complex_out)
-        self.__add_intermediate(intermediate, free_out, "bad.pdb")
+    def apply_reaction(self, output_file="output.pdb", interm_out="intermediate.pdb" , free_out="product_free.pdb",
+                       complex_out="product_complex.pdb",
+                       outpath=os.path.join(os.getcwd(), "reaction")):
+        intermediate = self.__prepare_intermediate(interm_out, complex_out, outpath)
+        self.__add_intermediate(intermediate, free_out, "bad.pdb", outpath)
+        self.__prepare_pdb_after_reaction()
+        self.__write_pdb(outpath, output_file)
 
 
-    def prepare_pdb_after_reaction(self):
+    def __prepare_pdb_after_reaction(self):
         if not self.hydrogens_to_rm:
             raise ValueError("Hydrogens to remove were not set. Please, apply a reaction before using this function")
         for num, hydrogenreact in enumerate(zip(self.hydrogens_to_rm, self.reactants)):
@@ -57,8 +59,8 @@ class Reaction:
                                          atom_name=hydrogen.name)
         self.pdb_to_link.update_content_from_lines()
 
-    def write_pdb(self, outfile):
-        self.pdb_to_link.write_content(os.path.join(self.outpath, outfile))
+    def __write_pdb(self, outpath, outfile):
+        self.pdb_to_link.write_content(os.path.join(outpath, outfile))
 
     def __get_bond_previous_bond_to_reaction(self):
         if not self.reaction_type:
@@ -78,11 +80,12 @@ class Reaction:
                     prev_bond = prev_bond[::-1] # If is not, change the order to get the correct core-fragment direction
                 return prev_bond
 
-    def __prepare_intermediate(self, free_file="intermediate.pdb", complex_file="product_complex.pdb"):
+    def __prepare_intermediate(self, free_file="intermediate.pdb", complex_file="product_complex.pdb",
+                               outpath=os.path.join(os.getcwd(), "reaction")):
         core_name, terminal_name = self.__get_bond_previous_bond_to_reaction()
         fr_pdb, fr_core_name, fr_core_h = fragments_relations[self.reaction_type]
-        if not os.path.exists(self.outpath):
-            os.mkdir(self.outpath)
+        if not os.path.exists(outpath):
+            os.mkdir(outpath)
         add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
                                     fr_pdb,
                                     pdb_atom_core_name=core_name,
@@ -96,16 +99,17 @@ class Reaction:
                                     h_frag=fr_core_h,  
                                     rename=False,
                                     threshold_clash=1.70, 
-                                    output_path=self.outpath, 
+                                    output_path=outpath, 
                                     only_grow=False)
         # 'pregrow' folder is created by FragPELE
-        self.pdb_to_link = PDB(os.path.join(self.outpath, "pregrow", complex_file))
+        self.pdb_to_link = PDB(os.path.join(outpath, "pregrow", complex_file))
         self.pdb_to_link.read_all()
-        intermediate_path = os.path.join(self.outpath, "pregrow", free_file)
+        intermediate_path = os.path.join(outpath, "pregrow", free_file)
         return intermediate_path
 
     def __add_intermediate(self, intermediate_path, free_file="product_free.pdb", 
-                           complex_file="bad.pdb"):
+                           complex_file="bad.pdb",
+                           outpath=os.path.join(os.getcwd(), "reaction")):
         replaced_atom, static_atom = self.__get_bond_previous_bond_to_reaction()
         # Add the intermediate (fragment) onto the COMPLEX PDB
         out_add = add_fragment_from_pdbs.main(self.reactants[0].pdb_file, 
@@ -121,7 +125,7 @@ class Reaction:
                                               h_frag=None, 
                                               rename=False,
                                               threshold_clash=1.70, 
-                                              output_path=self.outpath, 
+                                              output_path=outpath, 
                                               only_grow=False,
                                               cov_res="{}:{}".format(self.reactants[1].chain, 
                                                                      self.reactants[1].resnum))
@@ -129,7 +133,7 @@ class Reaction:
         os.remove("merged.pdb")
         self.hydrogens_to_rm = out_add[1][::-1] # Reversed to fit with the reactants
         curr_dir = os.getcwd()
-        os.chdir(os.path.join(self.outpath, "pregrow"))
+        os.chdir(os.path.join(outpath, "pregrow"))
         prepare_pdb(pdb_in=free_file, 
                     pdb_out=free_file, 
                     sch_path=SCH_PATH)

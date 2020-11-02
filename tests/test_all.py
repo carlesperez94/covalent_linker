@@ -9,11 +9,8 @@ from covalent_linker.Simulations.create_templates import ResidueLigandTemplate
 def test_nucleophilic_triple_CYS():
     r = LigandResidueReaction()
     r.load_pdb("input_files/test_cys_n_t.pdb", residue_chain="A", residue_num=145)
-    r.outpath = "output_files/reaction"
     r.set_nucleophilic_addition_triple_bond_reaction()
-    r.apply_reaction()
-    r.prepare_pdb_after_reaction()
-    r.write_pdb("output.pdb")
+    r.apply_reaction(outpath="output_files/reaction", output_file="output.pdb")
     out1 = "output_files/reaction/output.pdb"
     exp1 = "expected_files/nucleoph_t_bond/output_cys.pdb"
     out2 = "output_files/reaction/pregrow/product_free.pdb"
@@ -36,11 +33,8 @@ def test_template_creation():
 def test_nucleophilic_triple_SER():
     r = LigandResidueReaction()
     r.load_pdb("input_files/test_ser_n_t.pdb", residue_chain="A", residue_num=145)
-    r.outpath = "output_files/reaction"
     r.set_nucleophilic_addition_triple_bond_reaction()
-    r.apply_reaction()
-    r.prepare_pdb_after_reaction()
-    r.write_pdb("output.pdb")
+    r.apply_reaction(outpath="output_files/reaction", output_file="output.pdb")
     out1 = "output_files/reaction/output.pdb"
     exp1 = "expected_files/nucleoph_t_bond/output_ser.pdb"
     out2 = "output_files/reaction/pregrow/product_free.pdb"
