@@ -42,6 +42,7 @@ class Reaction:
         self.__add_intermediate(intermediate, free_out, "bad.pdb", outpath)
         self.__prepare_pdb_after_reaction()
         self.__write_pdb(outpath, output_file)
+        self.__correct_pdb_output(output_file, outpath)
 
 
     def __prepare_pdb_after_reaction(self):
@@ -57,7 +58,15 @@ class Reaction:
             self.pdb_to_link.delete_atom(chain=react.chain,
                                          resnum=resnum,
                                          atom_name=hydrogen.name)
-        self.pdb_to_link.update_content_from_lines()
+
+    def __correct_pdb_output(self, output_file="output.pdb",
+                             outpath=os.path.join(os.getcwd(), "reaction")):
+        pdb = PDB(os.path.join(outpath, output_file))
+        ch_r = self.reactants[1].chain
+        ch_l = self.reactants[0].chain
+        nu_r = self.reactants[1].resnum
+        pdb.join_ligand_to_residue(ch_r, nu_r, ch_l)
+        pdb.write_content(os.path.join(outpath, output_file))
 
     def __write_pdb(self, outpath, outfile):
         self.pdb_to_link.write_content(os.path.join(outpath, outfile))

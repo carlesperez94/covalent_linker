@@ -10,6 +10,7 @@ class PDB:
         self.lines = None
         self.atom_section = None
         self.conect_section = None
+        self.read_all()
 
     def read_content(self):
         """
@@ -89,23 +90,95 @@ class PDB:
         self.read_atoms_section()
         self.read_conect()
         
-
     def delete_atom(self, chain, resnum, atom_name):
         for line in self.atom_section:
             chain_l = get_chain_from_line(line).strip()
             resnum_l = get_resnum_from_line(line).strip()
             name_l = get_atom_pdb_name_from_line(line).strip()
             if str(chain_l) == str(chain) and int(resnum_l) == int(resnum) and str(name_l) == str(atom_name):
-                print(line)
+                print("Deleting... {}".format(line))
                 self.lines.remove(line)
+        self.__update_content_from_lines()
+
+    def delete_residue(self, chain, resnum):
+        for line in self.atom_section:
+            chain_l = get_chain_from_line(line).strip()
+            resnum_l = get_resnum_from_line(line).strip()
+            if str(chain_l) == str(chain) and int(resnum_l) == int(resnum):
+                print("Deleting... {}".format(line))
+                try:
+                    self.lines.remove(line)
+                except ValueError:
+                    print("{} does not exist".format(line))
+        self.__update_content_from_lines()
+
+    def replace_residue(self, chain, resnum,  residue_new):
+        new_residue_lines = residue_new.split("\n")
+        for n, line in enumerate(self.lines):
+            if line.startswith("ATOM"):
+                chain_l = get_chain_from_line(line).strip()
+                resnum_l = get_resnum_from_line(line).strip()
+                if str(chain_l) == str(chain) and int(resnum_l) == int(resnum):
+                    self.delete_residue(chain, resnum)
+                    for new_l in new_residue_lines:
+                        self.lines.insert(n, new_l+"\n")
+                        n = n+1
+                    break
+        self.__update_content_from_lines()
+
+    def join_ligand_to_residue(self, res_chain, resnum, ligand_chain="L"):
+        residue = self.get_residue(resnum, res_chain)
+        ligand = self.get_ligand(ligand_chain)
+        ligand_lines = ligand.split("\n")
+        new_lig_lines = []
+        for line in ligand_lines:
+            if line.startswith("HETATM"):
+                line = replace_hetatm_to_atom_in_line(line) 
+                line = replace_chain_in_line(line, res_chain) 
+                line = replace_resnum_in_line(line, resnum)
+                new_lig_lines.append(line)
+        ligname = get_resname_from_line(new_lig_lines[0])
+        residue_lines = residue.split("\n")
+        new_res_lines = []
+        for line in residue_lines:
+            if line.startswith("ATOM"):
+                line = replace_resname_in_line(line, ligname)
+                new_res_lines.append(line)
+        new_res = "\n".join(new_res_lines) + "\n" + "\n".join(new_lig_lines)
+        lignum = int(get_resnum_from_line(ligand_lines[0]))
+        self.delete_residue(ligand_chain, lignum)
+        self.replace_residue(res_chain, resnum, new_res)
     
-    def update_content_from_lines(self):
+    def __update_content_from_lines(self):
         self.content = "".join(self.lines)
 
     def write_content(self, outfile):
         with open(outfile, "w") as out:
             out.write(self.content)
 
+def replace_hetatm_to_atom_in_line(line):
+    line = list(line)
+    line[0:6] = "ATOM  "
+    line = "".join(line)
+    return line
+
+def replace_chain_in_line(line, new_chain):
+    line = list(line)
+    line[21] = new_chain
+    line = "".join(line)
+    return line
+
+def replace_resnum_in_line(line, resnum):
+    line = list(line)
+    line[22:26] = "{:4d}".format(resnum)
+    line = "".join(line)
+    return line
+
+def replace_resname_in_line(line, resname):
+    line = list(line)
+    line[17:20] = "{:3s}".format(resname)
+    line = "".join(line)
+    return line
 
 def get_chain_from_line(line):
     return line[21]
