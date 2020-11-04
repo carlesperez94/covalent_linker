@@ -1,7 +1,7 @@
 import os
-from offpele.topology import Molecule, RotamerLibrary
-from offpele.template import Impact
-from offpele.utils import get_data_file_path
+from peleffy.topology import Molecule, RotamerLibrary
+from peleffy.template import Impact
+from peleffy.utils import get_data_file_path
 import frag_pele.Covalent.correct_template_of_backbone_res as cov
 from frag_pele.Helpers import folder_handler
 from covalent_linker.constants import SCH_PATH, DATA
